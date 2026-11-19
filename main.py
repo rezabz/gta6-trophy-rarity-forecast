@@ -53,7 +53,9 @@ Z = [-1.645, -0.674, 0, 0.674, 1.645]
 # --- model constants (structure / priors, not tuned to any case answer) ---
 SIGMA0 = 0.15            # read noise, logit units
 SIGMA_TREND = 0.35       # trend uncertainty per sqrt(day)
-SIGMA_REFRESH_FLAT = 0.5   # refresh size unknown (flat history)
+SIGMA_REFRESH_FLAT = 0.35   # refresh size unknown (flat history); backtest:
+                             # 0.50 gave coverage 0.982 (too wide), 0.35 gives
+                             # 0.927 with the same loss (~0.22)
 SIGMA_REFRESH_RICH = 0.25  # refreshes observed; future sizes uncertain
 REFRESH_INTERVAL_LO = 4.0  # hours; refreshes come every ~4-6 h early on
 REFRESH_INTERVAL_HI = 6.0
