@@ -52,7 +52,13 @@ Z = [-1.645, -0.674, 0, 0.674, 1.645]
 
 # --- model constants (structure / priors, not tuned to any case answer) ---
 SIGMA0 = 0.15            # read noise, logit units
-SIGMA_TREND = 0.35       # trend uncertainty per sqrt(day)
+SIGMA_TREND = 0.25       # trend uncertainty per sqrt(day); backtest: the
+                             # synthetic final favours 0.20-0.25 over 0.35 in
+                             # both worlds (sat 0.16 vs 0.20, pow 0.16 vs
+                             # 0.20); 0.25 keeps an honest wide spread for
+                             # the real 4.5-day horizon (sigma ~0.61), since
+                             # the simulator shares the model's assumptions
+                             # and understates real-world surprise
 SIGMA_REFRESH_FLAT = 0.35   # refresh size unknown (flat history); backtest:
                              # 0.50 gave coverage 0.982 (too wide), 0.35 gives
                              # 0.927 with the same loss (~0.22)
@@ -64,6 +70,8 @@ FIRST_REFRESH_N_FACTOR = 6.06  # launch prior: first refresh 638 -> 3868
 LATER_REFRESH_N_FACTOR = 2.0   # later refreshes multiply N by less
 PRIOR_PSEUDO_WEIGHT = 1.0      # shrinkage weight of the difficulty prior
 PROG_SHRINK = 0.5              # weight of a trophy's own progression slope
+PROG_WINDOW = 6                # progression fit uses the last 6 states only
+PROG_MAX_BETA = 1.0            # cap on progression exponents
 MIN_T_HOURS = 0.25             # floor for hours-since-release (log scale)
 
 
@@ -241,21 +249,31 @@ def cohort_rates(states, trophies):
 
 
 def progression_exponents(states, trophies):
-    """Shrunk power-law exponents of holder counts vs time, per trophy."""
+    """Shrunk power-law exponents of holder counts vs time, per trophy.
+
+    Fitted on the RECENT distinct states only (last 6): fitting over the
+    whole history catches the launch-phase explosion (holder counts rising
+    from ~0), whose slope extrapolated forward massively overshoots trophies
+    that have since levelled off. The recent window measures the settled
+    growth rate instead. Exponents are clamped to [0, 1.0] and shrunk
+    halfway toward the cross-trophy median.
+    """
     n_tr = len(trophies)
     betas = [None] * n_tr
-    if len(states) >= 3:
+    recent = states[-PROG_WINDOW:]
+    if len(recent) >= 3:
         for i in range(n_tr):
             pts = [(math.log(s["t"]), math.log(s["e"][i]))
-                   for s in states if s["e"][i] > 0]
+                   for s in recent if s["e"][i] > 0]
             if len(pts) >= 3:
                 _, b = ols_slope_intercept([p[0] for p in pts],
                                            [p[1] for p in pts])
-                betas[i] = clamp(b, 0.0, 1.5)
+                betas[i] = clamp(b, 0.0, PROG_MAX_BETA)
     fitted = [b for b in betas if b is not None]
     beta_med = median(fitted) if fitted else 0.0
     return [beta_med if b is None else
-            clamp(PROG_SHRINK * b + (1.0 - PROG_SHRINK) * beta_med, 0.0, 1.5)
+            clamp(PROG_SHRINK * b + (1.0 - PROG_SHRINK) * beta_med,
+                  0.0, PROG_MAX_BETA)
             for b in betas], beta_med
 
 
